@@ -24,6 +24,7 @@ from common.utils import convert_webp_to_png, remove_markdown_symbol
 from config import conf, get_appdata_dir
 from lib import itchat
 from lib.itchat.content import *
+from utils.patpat_messages import tips_msg
 
 
 @itchat.msg_register([TEXT, VOICE, PICTURE, NOTE, ATTACHMENT, SHARING])
@@ -246,6 +247,7 @@ class WechatChannel(ChatChannel):
             itchat.send(reply.content, toUserName=receiver)
             logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
         elif reply.type == ReplyType.ERROR or reply.type == ReplyType.INFO:
+            reply.content = reply.content.replace('[INFO]', '[提示]', 1)
             reply.content = remove_markdown_symbol(reply.content)
             itchat.send(reply.content, toUserName=receiver)
             logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
@@ -305,9 +307,15 @@ class WechatChannel(ChatChannel):
                 try:
                     # 自动接受好友申请
                     debug_msg = itchat.accept_friend(userName=context.content["UserName"], v4=context.content["Ticket"])
-                    if "accept_friend_msg" in conf():
-                        accept_friend_msg = conf().get("accept_friend_msg", "")
-                        itchat.send(accept_friend_msg, toUserName=context.content["UserName"])
+                    # if "accept_friend_msg" in conf():
+                    #     accept_friend_msg = conf().get("accept_friend_msg", "")
+                    #     itchat.send(accept_friend_msg, toUserName=context.content["UserName"])
+
+                    # 给好友发生提示消息
+                    reply.content = tips_msg()
+                    time.sleep(0.5)
+                    itchat.send(reply.content, toUserName=context.content["UserName"])
+
                     logger.debug("[WX] accept_friend return: {}".format(debug_msg))
                     logger.info("[WX] Accepted new friend, UserName={}, NickName={}".format(context.content["UserName"],
                                                                                             context.content[

@@ -47,3 +47,7 @@ reference-context
 
 # test bot
 test_dify.py
+
+!plugins/sum4all
+!plugins/oil_inquiry
+!plugins/timetask

@@ -15,6 +15,7 @@ from bridge.reply import Reply, ReplyType
 from common import const
 from config import conf, load_config, global_config
 from plugins import *
+from utils import mysql_utils
 
 # 定义指令集
 COMMANDS = {
@@ -62,8 +63,12 @@ COMMANDS = {
         "desc": "获取用户id",  # wechaty和wechatmp的用户id不会变化，可用于绑定管理员
     },
     "reset": {
-        "alias": ["reset", "重置会话"],
+        "alias": ["清空", "重置会话"],
         "desc": "重置会话",
+    },
+    "balances": {
+        "alias": ["查询余额", "查询您账户所剩余的余额"],
+        "desc": "查询您账户所剩余的余额",
     },
 }
 
@@ -136,12 +141,17 @@ ADMIN_COMMANDS = {
 
 # 定义帮助函数
 def get_help_text(isadmin, isgroup):
-    help_text = "通用指令\n"
+    help_text = "通用指令:\n"
     for cmd, info in COMMANDS.items():
         if cmd in ["auth", "set_openai_api_key", "reset_openai_api_key", "set_gpt_model", "reset_gpt_model", "gpt_model"]:  # 不显示帮助指令
             continue
         if cmd == "id" and conf().get("channel_type", "wx") not in ["wxy", "wechatmp"]:
             continue
+
+        # 个人更改，不显示帮助等
+        if cmd in ['help', 'model', 'helpp']:
+            continue
+
         alias = ["#" + a for a in info["alias"][:1]]
         help_text += f"{','.join(alias)} "
         if "args" in info:
@@ -155,8 +165,8 @@ def get_help_text(isadmin, isgroup):
     for plugin in plugins:
         if plugins[plugin].enabled and not plugins[plugin].hidden:
             namecn = plugins[plugin].namecn
-            help_text += "\n%s:" % namecn
-            help_text += PluginManager().instances[plugin].get_help_text(verbose=False).strip()
+            # help_text += "\n%s:" % namecn
+            # help_text += PluginManager().instances[plugin].get_help_text(verbose=False).strip()
 
     if ADMIN_COMMANDS and isadmin:
         help_text += "\n\n管理员指令：\n"
@@ -321,6 +331,29 @@ class Godcmd(Plugin):
                         ok, result = True, "会话已重置"
                     else:
                         ok, result = False, "当前对话机器人不支持重置会话"
+
+                elif cmd == "balances":
+                    if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU,
+                                   const.XUNFEI, const.QWEN, const.GEMINI, const.ZHIPU_AI, const.DIFY, const.COZE]:
+                        attr_status = e_context.econtext['context'].kwargs['msg'].attr_status
+                        remark_name = e_context.econtext['context'].kwargs['msg'].remark_name
+                        balances = 0
+                        user_data = None
+                        if remark_name is not None and remark_name != "":
+                            user_data = mysql_utils.select_user(remark_name=remark_name)
+                        if user_data == None:
+                            user_data = mysql_utils.select_user(attr_status=attr_status)
+
+                        if user_data != None:
+                            balances = round(user_data['recharge_amount'] - user_data['quota_used'], 2)
+
+                        if user_data is not None and remark_name is not None and remark_name != '' and remark_name != \
+                                user_data['remark_name']:
+                            mysql_utils.uptdate_user(remark_name=remark_name,
+                                                     attr_status=attr_status, id=user_data['id'])
+
+                        ok, result = True, f"当前余额为:{balances}元人民币"
+
                 logger.debug("[Godcmd] command: %s by %s" % (cmd, user))
             elif any(cmd in info["alias"] for info in ADMIN_COMMANDS.values()):
                 if isadmin:

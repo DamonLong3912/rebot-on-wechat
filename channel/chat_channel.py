@@ -229,9 +229,17 @@ class ChatChannel(Channel):
             elif context.type == ContextType.ACCEPT_FRIEND:  # 好友申请，匹配字符串
                 reply = self._build_friend_request_reply(context)
             elif context.type == ContextType.SHARING:  # 分享信息，当前无默认逻辑
-                pass
+                # 实现
+                memory.USER_URL_CACHE[context["session_id"]] = {
+                    "path": context.content,
+                    "msg": context.get("msg")
+                }
             elif context.type == ContextType.FUNCTION or context.type == ContextType.FILE:  # 文件消息及函数调用等，当前无默认逻辑
-                pass
+                # 实现
+                memory.USER_FILE_CACHE[context["session_id"]] = {
+                    "path": context.content,
+                    "msg": context.get("msg")
+                }
             else:
                 logger.warning("[chat_channel] unknown context type: {}".format(context.type))
                 return
@@ -309,10 +317,11 @@ class ChatChannel(Channel):
     def _build_friend_request_reply(self, context):
         if isinstance(context.content, dict) and "Content" in context.content:
             logger.info("friend request content: {}".format(context.content["Content"]))
-            if context.content["Content"] in conf().get("accept_friend_commands", []):
-                return Reply(type=ReplyType.ACCEPT_FRIEND, content=True)
-            else:
-                return Reply(type=ReplyType.ACCEPT_FRIEND, content=False)
+            # if context.content["Content"] in conf().get("accept_friend_commands", []):
+            #     return Reply(type=ReplyType.ACCEPT_FRIEND, content=True)
+            # else:
+            #     return Reply(type=ReplyType.ACCEPT_FRIEND, content=False)
+            return Reply(type=ReplyType.ACCEPT_FRIEND, content=True)
         else:
             logger.error("Invalid context content: {}".format(context.content))
             return None

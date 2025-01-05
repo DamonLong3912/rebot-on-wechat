@@ -147,7 +147,10 @@ def check_login(self, uuid=None):
     params = 'loginicon=true&uuid=%s&tip=1&r=%s&_=%s' % (
         uuid, int(-localTime / 1579), localTime)
     headers = {'User-Agent': config.USER_AGENT}
-    r = self.s.get(url, params=params, headers=headers)
+    try:
+        r = self.s.get(url, params=params, headers=headers)
+    except Exception as e:
+        r = self.s.get(url, params=params, headers=headers)
     regx = r'window.code=(\d+)'
     data = re.search(regx, r.text)
     if data and data.group(1) == '200':

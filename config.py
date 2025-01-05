@@ -207,6 +207,11 @@ available_setting = {
     "Minimax_group_id": "",
     "Minimax_base_url": "",
     "web_port": 9899,
+
+    # 是否开启token计费
+    "token_billing": True,
+    "input_multiple": 5,  # 输入token价格倍数
+    "output_multiple": 3,  # 输出token价格倍数
 }
 
 

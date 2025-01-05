@@ -1,11 +1,15 @@
 import re
 
 from bridge.context import ContextType
+from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 from common.log import logger
 from common.tmp_dir import TmpDir
+from config import conf
 from lib import itchat
 from lib.itchat.content import *
+from utils import mysql_utils
+import xml.etree.ElementTree as ET
 
 class WechatMessage(ChatMessage):
     def __init__(self, itchat_msg, is_group=False):
@@ -84,6 +88,9 @@ class WechatMessage(ChatMessage):
         elif itchat_msg["Type"] == FRIENDS:
             self.ctype = ContextType.ACCEPT_FRIEND
             self.content = itchat_msg.get("RecommendInfo")
+        # token计费则 放行转账
+        elif itchat_msg["Type"] == NOTE and itchat_msg["MsgType"] == 49 and conf().get('token_billing'):
+            pass
             
         else:
             raise NotImplementedError("Unsupported message type: Type:{} MsgType:{}".format(itchat_msg["Type"], itchat_msg["MsgType"]))
@@ -125,3 +132,128 @@ class WechatMessage(ChatMessage):
             self.actual_user_id = itchat_msg["ActualUserName"]
             if self.ctype not in [ContextType.JOIN_GROUP, ContextType.PATPAT, ContextType.EXIT_GROUP]:
                 self.actual_user_nickname = itchat_msg["ActualNickName"]
+
+
+
+
+
+        # 查询余额和转账处理
+        try:
+            # 指令不处理
+            if self.ctype == ContextType.TEXT and self.content.startswith('#'):
+                try:
+                    remark_name = itchat_msg["User"]["RemarkName"]
+                except KeyError as e:  # 处理偶尔没有对方信息的情况
+                    remark_name = ''
+
+                attr_status = nickname + '#' + str(itchat_msg["User"]["AttrStatus"])
+                self.attr_status = attr_status
+                self.remark_name = remark_name
+                pass
+            # 群聊和自己发的消息不处理和加好友不做处理,ContextType.EXIT_GROUP不做处理,拍一拍不做处理
+            elif (is_group is False and self.my_msg == False and self.ctype != ContextType.ACCEPT_FRIEND
+                  and self.ctype != ContextType.EXIT_GROUP and self.ctype != ContextType.PATPAT):
+
+                try:
+                    remark_name = itchat_msg["User"]["RemarkName"]
+                except KeyError as e:  # 处理偶尔没有对方信息的情况
+                    remark_name = ''
+
+                attr_status = nickname + '#' + str(itchat_msg["User"]["AttrStatus"])
+                self.attr_status = attr_status
+                self.remark_name = remark_name
+
+                # 若是转账请求
+                if itchat_msg["Type"] == NOTE and itchat_msg["MsgType"] == 49:
+                    # 充值金额
+                    recharge_amount = None
+                    # 充值状态
+                    recharge_status = None
+                    # 解析XML数据
+                    # Parse XML data
+                    root = ET.fromstring(itchat_msg["Content"])
+                    # Find the 'feedesc' element and get its text
+                    feedesc_element = root.find('.//feedesc')
+                    if feedesc_element is not None:
+                        recharge_amount = float(str(feedesc_element.text).replace('￥', '', 1))
+
+                    paysubtype_element = root.find('.//paysubtype')
+                    if paysubtype_element is not None:
+                        recharge_status = int(paysubtype_element.text)
+
+                    if recharge_amount is not None and recharge_status is not None:
+                        # 1是转账未领取，3是领取转账，为了实时性，未领取时就算充值成功，后面再领取
+                        if recharge_status == 1:
+                            is_insert = mysql_utils.insert_user(remark_name=remark_name,
+                                                                recharge_amount=recharge_amount,
+                                                                attr_status=attr_status)
+                            if is_insert:
+                                receiver = itchat_msg['FromUserName']
+                                reply = Reply(ReplyType.TEXT,
+                                              f"收到您的{recharge_amount}元奖励，我们满电出发！请重复您的问题呢。")
+                                itchat.send(reply.content, toUserName=receiver)
+                            else:
+                                # 异常
+                                receiver = itchat_msg['FromUserName']
+                                reply = Reply(ReplyType.TEXT, "充电异常")
+                                itchat.send(reply.content, toUserName=receiver)
+
+                        elif recharge_status == 3:
+                            pass
+                        else:
+                            # 异常
+                            receiver = itchat_msg['FromUserName']
+                            reply = Reply(ReplyType.TEXT, "充电异常")
+                            itchat.send(reply.content, toUserName=receiver)
+                    # 转账处理到这里就结束了，不往下走
+                    raise NotImplementedError(
+                        "Unsupported message type: Type:{} MsgType:{}".format(itchat_msg["Type"],
+                                                                              itchat_msg["MsgType"]))
+                else:
+                    # 若token计费
+                    if conf().get('token_billing'):
+                        user_data = None
+                        # 优先用备注名
+                        if remark_name is not None and remark_name != "":
+                            user_data = mysql_utils.select_user(remark_name=remark_name)
+                        if user_data == None:
+                            user_data = mysql_utils.select_user(attr_status=attr_status)
+
+                        if user_data is not None and remark_name is not None and remark_name != '' and remark_name != \
+                                user_data['remark_name']:
+                            mysql_utils.uptdate_user(remark_name=remark_name,
+                                                     attr_status=attr_status, id=user_data['id'])
+
+                        if user_data is None:
+                            # receiver = itchat_msg['FromUserName']
+                            # reply = Reply(ReplyType.TEXT, f"啊欧，{nickname} 似乎累晕了，试试转账功能，给我充充电呢？")
+                            # itchat.send(reply.content, toUserName=receiver)
+                            # raise NotImplementedError(f"啊欧，{nickname} 似乎累晕了，试试转账功能，给我充充电呢？")
+                            # 免费充一元
+                            mysql_utils.insert_user(remark_name=remark_name,
+                                                    recharge_amount=1,
+                                                    attr_status=attr_status)
+                        elif float(user_data['recharge_amount']) - float(user_data['quota_used']) <= 0:
+                            receiver = itchat_msg['FromUserName']
+                            reply = Reply(ReplyType.TEXT,
+                                          f"啊欧，{nickname} 似乎累晕了，试试转账功能，给我充充电呢？")
+                            itchat.send(reply.content, toUserName=receiver)
+                            raise NotImplementedError(f"啊欧，{nickname} 似乎累晕了，试试转账功能，给我充充电呢？")
+
+        except Exception as a:
+            raise NotImplementedError(str(a))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

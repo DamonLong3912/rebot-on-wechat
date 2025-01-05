@@ -68,4 +68,5 @@ def run():
 
 
 if __name__ == "__main__":
+    os.environ['TZ'] = 'Asia/Shanghai'
     run()

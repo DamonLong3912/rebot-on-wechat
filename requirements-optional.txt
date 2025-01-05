@@ -47,3 +47,27 @@ gradio==4.37.2
 gradio_client==1.0.2
 # tongyi qwen new sdk
 dashscope
+
+
+
+
+
+# mysql
+PyMySQL
+redis==5.0.4
+
+# time
+arrow>=1.2.3
+openpyxl>=3.1.2
+croniter>=1.4.1
+
+# sum4all
+python-docx==1.1.2
+PyMuPDF==1.24.5
+openpyxl==3.1.4
+python-pptx==0.6.23
+Pillow==10.3.0
+rapidocr_pdf[openvino]==0.1.0
+#
+markdown==3.6
+beautifulsoup4==4.12.3

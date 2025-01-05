@@ -7,6 +7,7 @@ from channel.chat_message import ChatMessage
 from common.log import logger
 from plugins import *
 from config import conf
+from utils.patpat_messages import tips_msg
 
 
 @plugins.register(
@@ -84,14 +85,15 @@ class Hello(Plugin):
                 return
             e_context.action = EventAction.BREAK
             return
-            
+
+        # 拍一拍使用固定内容
         if e_context["context"].type == ContextType.PATPAT:
-            e_context["context"].type = ContextType.TEXT
-            e_context["context"].content = self.patpat_prompt
-            e_context.action = EventAction.BREAK  # 事件结束，进入默认处理逻辑
-            if not self.config or not self.config.get("use_character_desc"):
-                e_context["context"]["generate_breaked_by"] = EventAction.BREAK
-            return
+            reply = Reply()
+            reply.type = ReplyType.TEXT
+            reply.content = tips_msg()
+            e_context["reply"] = reply
+            e_context.action = EventAction.BREAK_PASS  # 事件结束，并跳过处理context的默认逻辑
+
 
         content = e_context["context"].content
         logger.debug("[Hello] on_handle_context. content: %s" % content)
